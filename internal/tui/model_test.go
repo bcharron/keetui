@@ -25,6 +25,8 @@ func keyMsg(s string) tea.KeyMsg {
 		return tea.KeyMsg{Type: tea.KeyBackspace}
 	case "ctrl+c":
 		return tea.KeyMsg{Type: tea.KeyCtrlC}
+	case "ctrl+u":
+		return tea.KeyMsg{Type: tea.KeyCtrlU}
 	default:
 		return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)}
 	}
@@ -203,6 +205,44 @@ func TestNavigation(t *testing.T) {
 	m, _ = send(m, keyMsg("up"))
 	if ep.cur != 0 {
 		t.Errorf("up at top should stay, cur=%d", ep.cur)
+	}
+}
+
+func TestCtrlUClearsQuery(t *testing.T) {
+	m := unlock(t, New("../../testdata/test-aes.kdbx"), "test-password")
+	m = typeKeys(m, "git")
+	if !strings.Contains(topPage(m).View(), "1 entry") {
+		t.Fatalf("expected filtered view")
+	}
+	m, _ = send(m, keyMsg("ctrl+u"))
+	v := topPage(m).View()
+	if !strings.Contains(v, "7 entries") {
+		t.Errorf("ctrl+u should clear the query back to all entries:\n%s", v)
+	}
+}
+
+func TestFuzzyFilter(t *testing.T) {
+	m := unlock(t, New("../../testdata/test-aes.kdbx"), "test-password")
+	// "gth" is not a substring of "GitHub" but is a subsequence
+	m = typeKeys(m, "gth")
+	v := topPage(m).View()
+	if !strings.Contains(v, "GitHub") {
+		t.Errorf("fuzzy query 'gth' should match GitHub:\n%s", v)
+	}
+	if strings.Contains(v, "gmail") {
+		t.Errorf("fuzzy query 'gth' should not match gmail:\n%s", v)
+	}
+	// scattered but in-order
+	m, _ = send(m, keyMsg("ctrl+u"))
+	m = typeKeys(m, "vpngw")
+	if !strings.Contains(topPage(m).View(), "VPN gateway") {
+		t.Errorf("fuzzy query 'vpngw' should match 'VPN gateway'")
+	}
+	// out of order does not match
+	m, _ = send(m, keyMsg("ctrl+u"))
+	m = typeKeys(m, "bgth")
+	if strings.Contains(topPage(m).View(), "GitHub") {
+		t.Errorf("out-of-order query 'bgth' should not match GitHub")
 	}
 }
 

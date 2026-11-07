@@ -20,14 +20,13 @@ func newEntriesPage(db *kdbx.Database) *entriesPage {
 	p := &entriesPage{db: db}
 	p.items = func() []kdbx.Entry { return p.db.Entries }
 	p.visible = func() []kdbx.Entry {
-		if p.filt.empty() {
-			return p.db.Entries
+		titles := make([]string, len(p.db.Entries))
+		for i, e := range p.db.Entries {
+			titles[i] = e.Title
 		}
 		var out []kdbx.Entry
-		for _, e := range p.db.Entries {
-			if p.filt.match(e.Title) {
-				out = append(out, e)
-			}
+		for _, idx := range p.filt.rank(titles) {
+			out = append(out, p.db.Entries[idx])
 		}
 		return out
 	}
@@ -77,5 +76,5 @@ func (p *entriesPage) View() string { return p.listPage.View() }
 func (p *entriesPage) Header() string { return "entries" }
 
 func (p *entriesPage) Hints() string {
-	return "type to filter  up/down select  pgup/pgdown page  enter open  esc clear/quit  ctrl+l redraw  ctrl+c quit"
+	return "type to filter (fuzzy)  ctrl+u clear  up/down select  pgup/pgdown page  enter open  esc clear/quit  ctrl+l redraw  ctrl+c quit"
 }

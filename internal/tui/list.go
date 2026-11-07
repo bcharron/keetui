@@ -61,6 +61,11 @@ func (l *listPage[T]) updateKeys(msg tea.KeyMsg) tea.Cmd {
 		}
 		return tea.Quit
 	}
+	if msg.String() == "ctrl+u" {
+		l.filt.q = ""
+		l.cur, l.off = 0, 0
+		return nil
+	}
 	if l.filt.update(msg) {
 		l.cur, l.off = 0, 0
 		return nil
