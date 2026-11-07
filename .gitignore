@@ -1,0 +1,4 @@
+/keetui
+# real databases used for manual testing, not fixtures
+/test.kdbx
+/toto.kdbx
