@@ -44,12 +44,14 @@ func main() {
 	}
 
 	send(tea.WindowSizeMsg{Width: 100, Height: 30})
-	send(keys("test-password")...)
-	cmd := send(tea.KeyMsg{Type: tea.KeyEnter})
-	if cmd != nil {
-		send(cmd()) // unlockMsg
+	if os.Getenv("SHOT_UNLOCK") == "" {
+		send(keys("test-password")...)
+		cmd := send(tea.KeyMsg{Type: tea.KeyEnter})
+		if cmd != nil {
+			send(cmd()) // unlockMsg
+		}
+		send(keys("g")...) // filter query, fuzzy-matched
 	}
-	send(keys("g")...) // filter query, fuzzy-matched
 
 	if err := os.WriteFile(os.Args[1], []byte(page(m.View())), 0o644); err != nil {
 		panic(err)

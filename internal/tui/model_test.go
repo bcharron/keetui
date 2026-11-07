@@ -246,6 +246,40 @@ func TestFuzzyFilter(t *testing.T) {
 	}
 }
 
+func TestUnlockModalView(t *testing.T) {
+	m, _ := send(New("../../testdata/test-aes.kdbx"), tea.WindowSizeMsg{Width: 100, Height: 30})
+	v := m.(App).View()
+	for _, want := range []string{"unlock database", "test-aes.kdbx", "╭", "╯"} {
+		if !strings.Contains(v, want) {
+			t.Errorf("unlock view missing %q", want)
+		}
+	}
+	// modal is centered: its title line sits well inside the content box
+	// (line 0 = top bar, line 1 = content box border), not at the top edge
+	lines := strings.Split(v, "\n")
+	found := -1
+	for i, l := range lines {
+		if strings.Contains(l, "unlock database") {
+			found = i
+			break
+		}
+	}
+	if found < 4 || found > len(lines)-4 {
+		t.Errorf("modal not vertically centered, title at line %d of %d", found, len(lines))
+	}
+}
+
+func TestEscOnUnlockQuits(t *testing.T) {
+	m, _ := send(New("../../testdata/test-aes.kdbx"), tea.WindowSizeMsg{Width: 100, Height: 30})
+	_, cmd := send(m, keyMsg("esc"))
+	if cmd == nil {
+		t.Fatal("esc on unlock should quit")
+	}
+	if _, ok := cmd().(tea.QuitMsg); !ok {
+		t.Fatalf("esc on unlock should produce tea.QuitMsg, got %T", cmd())
+	}
+}
+
 func TestEscOnEmptyQueryQuits(t *testing.T) {
 	m := unlock(t, New("../../testdata/test-aes.kdbx"), "test-password")
 	_, cmd := send(m, keyMsg("esc"))
