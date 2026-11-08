@@ -36,6 +36,9 @@ type listPage[T any] struct {
 	headLines int
 	// emptyText is shown when the database itself has no items.
 	emptyText string
+	// escQuits makes esc quit the app when the query is empty; false
+	// for sub-pages, where esc pops back to the previous page.
+	escQuits bool
 }
 
 // resize records the content-area dimensions.
@@ -59,7 +62,10 @@ func (l *listPage[T]) updateKeys(msg tea.KeyMsg) tea.Cmd {
 			l.cur, l.off = 0, 0
 			return nil
 		}
-		return tea.Quit
+		if l.escQuits {
+			return tea.Quit
+		}
+		return Pop()
 	}
 	if msg.String() == "ctrl+u" {
 		l.filt.q = ""

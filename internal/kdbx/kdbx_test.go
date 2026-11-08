@@ -106,6 +106,25 @@ func checkFixture(t *testing.T, path string) {
 	if !prot {
 		t.Errorf("Password field not marked protected")
 	}
+	// history: two versions, newest first, passwords decrypted, and
+	// history entries must NOT appear as top-level entries
+	if len(gh.Versions) != 2 {
+		t.Fatalf("GitHub versions = %d, want 2", len(gh.Versions))
+	}
+	if gh.Versions[0].Password != "old-password-2" || gh.Versions[1].Password != "old-password-1" {
+		t.Errorf("version passwords = %q, %q", gh.Versions[0].Password, gh.Versions[1].Password)
+	}
+	if gh.Versions[0].Modified <= gh.Versions[1].Modified {
+		t.Errorf("versions not newest-first: %q then %q", gh.Versions[0].Modified, gh.Versions[1].Modified)
+	}
+	if gh.Versions[0].UserName != "octocat-old" {
+		t.Errorf("version username = %q", gh.Versions[0].UserName)
+	}
+	for _, e := range db.Entries {
+		if e.UUID == "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" || e.UUID == "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" {
+			t.Errorf("history entry %s leaked into top-level list", e.UUID)
+		}
+	}
 }
 
 func TestOpenAESKDFAES(t *testing.T) {

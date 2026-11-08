@@ -42,6 +42,9 @@ type Entry struct {
 	Attachments  []string
 	GroupPath    string // e.g. "TestDB/Work/VPN"; "" for root-level entries
 	InRecycleBin bool
+	// Versions holds the entry's history: previous versions of this
+	// entry, newest first. The live entry itself is not included.
+	Versions []Entry
 }
 
 // Database is the parsed content of a KDBX file. Entries are sorted
@@ -137,11 +140,13 @@ func parseXML(doc []byte, st *innerStream) (*Database, error) {
 	db := &Database{}
 
 	var gstack []gframe
-	var entry *Entry
+	var entryStack []*Entry
+	var entry *Entry // top of entryStack, for field captures
 	var field *Field
 	var binKey *string
 	var capture *string
 	var expiresFlag string
+	var inHistory bool
 
 	for {
 		tok, err := dec.Token()
@@ -165,7 +170,10 @@ func parseXML(doc []byte, st *innerStream) (*Database, error) {
 					gstack[len(gstack)-1].name = ""
 				}
 			case "Entry":
-				entry = &Entry{}
+				entryStack = append(entryStack, &Entry{})
+				entry = entryStack[len(entryStack)-1]
+			case "History":
+				inHistory = true
 			case "UUID":
 				if entry != nil {
 					capture = &entry.UUID
@@ -248,13 +256,28 @@ func parseXML(doc []byte, st *innerStream) (*Database, error) {
 				}
 				capture = nil
 			case "Entry":
-				if entry != nil {
-					entry.ExpiresSet = expiresFlag == "True"
-					finishEntry(db, entry, gstack)
-					entry = nil
+				if len(entryStack) > 0 {
+					e := entryStack[len(entryStack)-1]
+					entryStack = entryStack[:len(entryStack)-1]
+					if len(entryStack) > 0 && inHistory {
+						// a history version of the parent entry
+						e.ExpiresSet = expiresFlag == "True"
+						fillEntry(e)
+						entryStack[len(entryStack)-1].Versions = append(entryStack[len(entryStack)-1].Versions, *e)
+					} else {
+						e.ExpiresSet = expiresFlag == "True"
+						finishEntry(db, e, gstack)
+					}
+					if len(entryStack) > 0 {
+						entry = entryStack[len(entryStack)-1]
+					} else {
+						entry = nil
+					}
 				}
 				field = nil
 				expiresFlag = ""
+			case "History":
+				inHistory = false
 			case "Group":
 				if len(gstack) > 0 {
 					gstack = gstack[:len(gstack)-1]
@@ -268,23 +291,16 @@ func parseXML(doc []byte, st *innerStream) (*Database, error) {
 		}
 	}
 	sortEntries(db.Entries)
+	for i := range db.Entries {
+		// newest version first; the formatted times sort lexicographically
+		vs := db.Entries[i].Versions
+		sort.SliceStable(vs, func(a, b int) bool { return vs[a].Modified > vs[b].Modified })
+	}
 	return db, nil
 }
 
-func finishEntry(db *Database, e *Entry, gstack []gframe) {
-	// gstack[0] is the root group; its own name is not part of the path.
-	path := ""
-	bin := false
-	if len(gstack) > 1 {
-		names := make([]string, 0, len(gstack))
-		for _, g := range gstack {
-			names = append(names, g.name)
-			bin = bin || g.bin
-		}
-		path = strings.Join(names, "/")
-	}
-	e.GroupPath = path
-	e.InRecycleBin = bin
+// fillEntry maps the standard fields onto the entry struct.
+func fillEntry(e *Entry) {
 	e.Created = formatKDBXTime(e.Created)
 	e.Modified = formatKDBXTime(e.Modified)
 	if e.ExpiresSet {
@@ -306,6 +322,23 @@ func finishEntry(db *Database, e *Entry, gstack []gframe) {
 			e.Notes = f.Value
 		}
 	}
+}
+
+func finishEntry(db *Database, e *Entry, gstack []gframe) {
+	// gstack[0] is the root group; its own name is not part of the path.
+	path := ""
+	bin := false
+	if len(gstack) > 1 {
+		names := make([]string, 0, len(gstack))
+		for _, g := range gstack {
+			names = append(names, g.name)
+			bin = bin || g.bin
+		}
+		path = strings.Join(names, "/")
+	}
+	e.GroupPath = path
+	e.InRecycleBin = bin
+	fillEntry(e)
 	db.Entries = append(db.Entries, *e)
 }
 

@@ -280,6 +280,65 @@ func TestEscOnUnlockQuits(t *testing.T) {
 	}
 }
 
+func TestVersionsFlow(t *testing.T) {
+	m := unlock(t, New("../../testdata/test-aes.kdbx"), "test-password")
+	// first entry is "GitHub", which has 2 history versions
+	m, cmd := send(m, keyMsg("enter"))
+	m, _ = send(m, cmd())
+	if _, ok := topPage(m).(*entryPage); !ok {
+		t.Fatalf("top is %T, want *entryPage", topPage(m))
+	}
+	// v opens the versions page
+	m, cmd = send(m, keyMsg("v"))
+	m, _ = send(m, cmd())
+	vp, ok := topPage(m).(*versionsPage)
+	if !ok {
+		t.Fatalf("top is %T, want *versionsPage", topPage(m))
+	}
+	v := vp.View()
+	if !strings.Contains(v, "2 versions") {
+		t.Errorf("versions page should list 2 versions:\n%s", v)
+	}
+	// newest first: 2024-02-01 before 2024-01-01
+	if strings.Index(v, "2024-02-01") > strings.Index(v, "2024-01-01") {
+		t.Errorf("versions not newest-first:\n%s", v)
+	}
+	// enter opens the newest version's detail
+	m, cmd = send(m, keyMsg("enter"))
+	m, _ = send(m, cmd())
+	dp, ok := topPage(m).(*entryPage)
+	if !ok {
+		t.Fatalf("top is %T, want *entryPage for version", topPage(m))
+	}
+	if !strings.Contains(dp.View(), "octocat-old") {
+		t.Errorf("version detail should show old username:\n%s", dp.View())
+	}
+	if strings.Contains(dp.View(), "old-password-2") {
+		t.Errorf("version password should be masked before x")
+	}
+	m, _ = send(m, keyMsg("x"))
+	if !strings.Contains(topPage(m).View(), "old-password-2") {
+		t.Errorf("x should reveal the version's password")
+	}
+	// esc back to versions, esc back to entry detail, esc to list
+	// (esc on the versions page is a Pop() command, so run it)
+	m, _ = send(m, keyMsg("esc"))
+	if _, ok := topPage(m).(*versionsPage); !ok {
+		t.Fatalf("esc should return to versions, top is %T", topPage(m))
+	}
+	m, cmd = send(m, keyMsg("esc"))
+	if cmd != nil {
+		m, _ = send(m, cmd())
+	}
+	if _, ok := topPage(m).(*entryPage); !ok {
+		t.Fatalf("esc should return to entry detail, top is %T", topPage(m))
+	}
+	m, _ = send(m, keyMsg("esc"))
+	if _, ok := topPage(m).(*entriesPage); !ok {
+		t.Fatalf("esc should return to list, top is %T", topPage(m))
+	}
+}
+
 func TestEscOnEmptyQueryQuits(t *testing.T) {
 	m := unlock(t, New("../../testdata/test-aes.kdbx"), "test-password")
 	_, cmd := send(m, keyMsg("esc"))

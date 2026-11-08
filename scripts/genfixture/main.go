@@ -51,11 +51,14 @@ type field struct {
 }
 
 type entry struct {
-	uuid    string
-	tags    string
-	expires string
-	bins    []string
-	fields  []field
+	uuid     string
+	tags     string
+	expires  string
+	bins     []string
+	fields   []field
+	history  []entry // previous versions, written inside <History>
+	created  string  // kdbxTime(...) values; empty = default
+	modified string
 }
 
 func main() {
@@ -219,14 +222,44 @@ func fixtureEntries(protect func(string) string) []entry {
 	mk := func(uuid, tags, expires string, bins []string, fields ...field) entry {
 		return entry{uuid: uuid, tags: tags, expires: expires, bins: bins, fields: fields}
 	}
+	// GitHub carries two history versions; they must be protected
+	// right after GitHub's own fields (the inner stream is continuous
+	// in document order).
+	gh := mk("11111111111111111111111111111111", "dev, web", "", nil,
+		field{"Title", "GitHub", false},
+		field{"UserName", "octocat", false},
+		field{"Password", protect("ghp_secret123"), true},
+		field{"URL", "https://github.com", false},
+		field{"Notes", "main account", false},
+	)
+	gh.created = kdbxTime(2024, 3, 1, 10, 0, 0)
+	gh.modified = kdbxTime(2024, 6, 1, 10, 0, 0)
+	gh.history = []entry{
+		{
+			uuid:     "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			created:  kdbxTime(2024, 1, 1, 9, 0, 0),
+			modified: kdbxTime(2024, 1, 1, 9, 0, 0),
+			fields: []field{
+				{"Title", "GitHub", false},
+				{"UserName", "octocat", false},
+				{"Password", protect("old-password-1"), true},
+				{"URL", "https://github.com", false},
+			},
+		},
+		{
+			uuid:     "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+			created:  kdbxTime(2024, 2, 1, 9, 0, 0),
+			modified: kdbxTime(2024, 2, 1, 9, 0, 0),
+			fields: []field{
+				{"Title", "GitHub", false},
+				{"UserName", "octocat-old", false},
+				{"Password", protect("old-password-2"), true},
+				{"URL", "https://github.com", false},
+			},
+		},
+	}
 	return []entry{
-		mk("11111111111111111111111111111111", "dev, web", "", nil,
-			field{"Title", "GitHub", false},
-			field{"UserName", "octocat", false},
-			field{"Password", protect("ghp_secret123"), true},
-			field{"URL", "https://github.com", false},
-			field{"Notes", "main account", false},
-		),
+		gh,
 		mk("22222222222222222222222222222222", "", "", nil,
 			field{"Title", "gmail", false},
 			field{"UserName", "octocat@gmail.com", false},
@@ -471,15 +504,30 @@ func writeEntry(x *bytes.Buffer, e entry) {
 	for _, b := range e.bins {
 		fmt.Fprintf(x, `<Binary><Key>%s</Key><Value Ref="0"/></Binary>`, xmlEscape(b))
 	}
+	created, modified := e.created, e.modified
+	if created == "" {
+		created = kdbxTime(2024, 1, 2, 3, 4, 5)
+	}
+	if modified == "" {
+		modified = kdbxTime(2024, 6, 7, 8, 9, 10)
+	}
 	x.WriteString("<Times>")
-	fmt.Fprintf(x, "<CreationTime>%s</CreationTime>", kdbxTime(2024, 1, 2, 3, 4, 5))
-	fmt.Fprintf(x, "<LastModificationTime>%s</LastModificationTime>", kdbxTime(2024, 6, 7, 8, 9, 10))
+	fmt.Fprintf(x, "<CreationTime>%s</CreationTime>", created)
+	fmt.Fprintf(x, "<LastModificationTime>%s</LastModificationTime>", modified)
 	if e.expires != "" {
 		fmt.Fprintf(x, "<ExpiryTime>%s</ExpiryTime><Expires>True</Expires>", e.expires)
 	} else {
-		fmt.Fprintf(x, "<ExpiryTime>%s</ExpiryTime><Expires>False</Expires>", kdbxTime(2024, 1, 2, 3, 4, 5))
+		fmt.Fprintf(x, "<ExpiryTime>%s</ExpiryTime><Expires>False</Expires>", created)
 	}
-	x.WriteString("</Times></Entry>")
+	x.WriteString("</Times>")
+	if len(e.history) > 0 {
+		x.WriteString("<History>")
+		for _, h := range e.history {
+			writeEntry(x, h)
+		}
+		x.WriteString("</History>")
+	}
+	x.WriteString("</Entry>")
 }
 
 // kdbxTime renders a UTC time as base64 of the 8-byte LE count of

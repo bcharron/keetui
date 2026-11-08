@@ -20,6 +20,9 @@ styled after `../vaultui`.
   URL, notes, expiry, tags, attachments); the password stays masked
   until `x` toggles visibility. There is no clipboard access — the
   tool is strictly read-only.
+- Entry history is not duplicated into the list: only the live version
+  of an entry is shown. Press `v` in the entry view to browse the
+  entry's previous versions (newest first) and open any of them.
 - `esc` clears the search (or quits when empty), `ctrl+u` erases the
   search, `ctrl+l` redraws, `ctrl+c` quits.
 
@@ -45,6 +48,7 @@ Requires Go 1.25+. Dependencies: bubbletea/bubbles/lipgloss (UI),
 | `up` `down` `pgup` `pgdown` | scroll the list |
 | `enter` | open entry detail |
 | `x` (in detail) | toggle password visibility |
+| `v` (in detail) | browse entry history versions |
 | `ctrl+l` | redraw |
 | `ctrl+c` | quit |
 

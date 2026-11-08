@@ -53,6 +53,7 @@ func newEntriesPage(db *kdbx.Database) *entriesPage {
 	p.noun = "entries"
 	p.headLines = 3
 	p.emptyText = "(no entries in database)"
+	p.escQuits = true
 	return p
 }
 
